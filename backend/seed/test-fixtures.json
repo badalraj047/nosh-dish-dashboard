@@ -1,0 +1,5 @@
+[
+  { "dishId": "test-invalid-url", "dishName": "Test: invalid image URL", "imageUrl": "not-a-valid-url", "isPublished": false },
+  { "dishId": "test-ftp-url", "dishName": "Test: non-http image URL", "imageUrl": "ftp://example.com/dish.jpg", "isPublished": false },
+  { "dishId": "test-broken-image", "dishName": "Test: valid URL, missing image", "imageUrl": "https://example.com/this-image-does-not-exist.jpg", "isPublished": false }
+]
