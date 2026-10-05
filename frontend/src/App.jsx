@@ -1,24 +1,36 @@
-import { useCallback, useEffect, useState } from 'react';
-import { POLL_INTERVAL_MS, useDishes } from './hooks/useDishes.js';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useDishes } from './hooks/useDishes.js';
 import DishCard from './components/DishCard.jsx';
+import SyncStatus from './components/SyncStatus.jsx';
+import Toolbar, { FILTERS } from './components/Toolbar.jsx';
 
-function SyncStatus({ sync, unsavedCount }) {
+function matchesFilter(dish, filter, dirtyIds) {
+  switch (filter) {
+    case 'published': return dish.isPublished;
+    case 'unpublished': return !dish.isPublished;
+    case 'unsaved': return dirtyIds.has(dish.dishId);
+    default: return true;
+  }
+}
+
+function matchesQuery(dish, query) {
+  const q = query.trim().toLowerCase();
+  return !q || dish.dishName.toLowerCase().includes(q) || dish.dishId.toLowerCase().includes(q);
+}
+
+function LoadingGrid() {
   return (
-    <div className="sync">
-      {sync.connected ? (
-        <span className="pill pill--ok" title={`Checks for saved changes every ${POLL_INTERVAL_MS / 1000} s`}>
-          Live{sync.lastSyncedAt && ` · synced ${sync.lastSyncedAt.toLocaleTimeString()}`}
-        </span>
-      ) : (
-        <span className="pill pill--warn" role="status" title="Showing the last loaded data. Your drafts are kept.">
-          Can’t reach server · retrying every {POLL_INTERVAL_MS / 1000} s
-        </span>
-      )}
-      {unsavedCount > 0 && (
-        <span className="pill pill--unsaved">
-          {unsavedCount} unsaved {unsavedCount === 1 ? 'draft' : 'drafts'}
-        </span>
-      )}
+    <div className="grid" aria-busy="true" aria-label="Loading dishes">
+      {Array.from({ length: 6 }, (_, i) => (
+        <div key={i} className="card card--skeleton" aria-hidden="true">
+          <div className="card__media skeleton" />
+          <div className="card__body">
+            <div className="skeleton skeleton--title" />
+            <div className="skeleton skeleton--line" />
+            <div className="skeleton skeleton--input" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -26,6 +38,9 @@ function SyncStatus({ sync, unsavedCount }) {
 export default function App() {
   const { dishes, status, loadError, sync, retry, applyServerDish } = useDishes();
   const [dirtyIds, setDirtyIds] = useState(() => new Set());
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState('all');
+  const searchRef = useRef(null);
 
   const onDirtyChange = useCallback((dishId, dirty) => {
     setDirtyIds((prev) => {
@@ -44,23 +59,61 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirtyIds.size]);
 
+  // Once the last draft is saved or discarded, the "Unsaved" view would be empty: go back to all
+  // dishes so the user sees the card they just saved (with its "Saved" badge).
+  useEffect(() => {
+    if (filter === 'unsaved' && dirtyIds.size === 0) setFilter('all');
+  }, [filter, dirtyIds.size]);
+
+  // "/" focuses the search box (unless the user is already typing somewhere).
+  useEffect(() => {
+    const onKey = (e) => {
+      const typing = e.target.closest?.('input, textarea, select, [contenteditable]');
+      if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const counts = {
+    all: dishes.length,
+    published: dishes.filter((d) => d.isPublished).length,
+    unpublished: dishes.filter((d) => !d.isPublished).length,
+    unsaved: dirtyIds.size,
+  };
+  const isVisible = (d) => matchesFilter(d, filter, dirtyIds) && matchesQuery(d, query);
+  const visibleCount = dishes.filter(isVisible).length;
+  const filterLabel = FILTERS.find((f) => f.id === filter)?.label.toLowerCase();
+  const clearFilters = () => { setQuery(''); setFilter('all'); };
+
   return (
     <div className="page">
       <header className="topbar">
         <div>
           <h1>Dish Dashboard</h1>
-          <p className="muted">Edits stay local until you press Save.</p>
+          <p className="muted">
+            Changes stay as drafts until you press <strong>Save</strong>
+            <span className="desktop-only"> · <kbd>Ctrl</kbd>+<kbd>S</kbd> saves the card you’re editing</span>
+          </p>
         </div>
-        {status === 'ready' && <SyncStatus sync={sync} unsavedCount={dirtyIds.size} />}
+        {status === 'ready' && (
+          <div className="topbar__status">
+            <SyncStatus sync={sync} />
+            {counts.unsaved > 0 && (
+              <button type="button" className="pill pill--unsaved" onClick={() => setFilter('unsaved')}
+                      title="Show only dishes with unsaved changes">
+                {counts.unsaved} unsaved {counts.unsaved === 1 ? 'draft' : 'drafts'}
+              </button>
+            )}
+          </div>
+        )}
       </header>
 
       <main>
-        {status === 'loading' && (
-          <div className="state" role="status">
-            <div className="spinner" aria-hidden="true" />
-            <p>Loading dishes…</p>
-          </div>
-        )}
+        {status === 'loading' && <LoadingGrid />}
 
         {status === 'error' && (
           <div className="state state--error" role="alert">
@@ -79,11 +132,29 @@ export default function App() {
         )}
 
         {status === 'ready' && dishes.length > 0 && (
-          <div className="grid">
-            {dishes.map((dish) => (
-              <DishCard key={dish.dishId} dish={dish} onServerDish={applyServerDish} onDirtyChange={onDirtyChange} />
-            ))}
-          </div>
+          <>
+            <Toolbar query={query} onQueryChange={setQuery} filter={filter} onFilterChange={setFilter}
+                     counts={counts} searchRef={searchRef} />
+
+            {visibleCount === 0 && (
+              <div className="state">
+                <h2>No matching dishes</h2>
+                <p className="muted">
+                  {query.trim() ? `Nothing matches “${query.trim()}”` : 'No dishes'}
+                  {filter !== 'all' && ` in “${filterLabel}”`}.
+                </p>
+                <button type="button" className="btn btn--secondary" onClick={clearFilters}>Clear search and filters</button>
+              </div>
+            )}
+
+            {/* Every card stays mounted; non-matching ones are only hidden, so their drafts survive filtering. */}
+            <div className="grid">
+              {dishes.map((dish) => (
+                <DishCard key={dish.dishId} dish={dish} hidden={!isVisible(dish)}
+                          onServerDish={applyServerDish} onDirtyChange={onDirtyChange} />
+              ))}
+            </div>
+          </>
         )}
       </main>
     </div>

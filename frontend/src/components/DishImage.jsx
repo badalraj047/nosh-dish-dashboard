@@ -1,9 +1,10 @@
 import { useState } from 'react';
+import { isHttpUrl } from '../utils.js';
 
 /** Dish photo with a fallback for missing, non-http(s) or broken image URLs. Remount (key) on src change. */
 export default function DishImage({ src, alt }) {
   const [failed, setFailed] = useState(false);
-  const usable = typeof src === 'string' && /^https?:\/\//i.test(src);
+  const usable = isHttpUrl(src);
 
   return (
     <div className="card__media">

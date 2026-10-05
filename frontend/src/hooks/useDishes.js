@@ -7,7 +7,7 @@ export const POLL_INTERVAL_MS = 5000;
  * Merge a fresh list into the current one, keeping whichever copy of each dish has the higher
  * version. A slow poll that started before a save can then never roll a dish back.
  */
-function mergeNewer(current, incoming) {
+export function mergeNewer(current, incoming) {
   const known = new Map(current.map((d) => [d.dishId, d]));
   return incoming.map((d) => {
     const prev = known.get(d.dishId);

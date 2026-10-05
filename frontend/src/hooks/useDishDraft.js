@@ -58,9 +58,8 @@ export function useDishDraft(server, onServerDish) {
     setConflict(null);
   }
 
-  /** Replace base and draft with the newest saved data. Asks first if a draft would be lost. */
+  /** Replace base and draft with the newest saved data. The UI asks for confirmation first if a draft would be lost. */
   function reloadLatest() {
-    if (isDirty && !window.confirm('Load the latest saved version?\n\nYour unsaved changes to this dish will be discarded.')) return;
     loadSaved(newest(server, conflict));
   }
 

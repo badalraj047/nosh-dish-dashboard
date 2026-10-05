@@ -9,8 +9,25 @@ overwrite a newer saved change.
 | Frontend | React 19 + Vite |
 | Backend  | Node.js + Express 5 |
 | Database | SQLite file database through Node's built-in `node:sqlite` (persistent, nothing native to compile) |
+| Tests    | `node:test` (backend API) · Vitest + Testing Library (frontend draft logic and card) |
 
 **Optional bonus (external updates): implemented** with polling every 5 s (see [Bonus](#optional-bonus-external-updates)).
+
+### What the dashboard offers
+
+- **Drafts you can see:** edited cards get an amber outline, an **Unsaved changes** badge, and "Saved value: …"
+  hints under each changed field. The header counts unsaved drafts, and clicking the counter shows only those dishes.
+- **Search and filters:** search by name or ID (press <kbd>/</kbd> to jump there, <kbd>Esc</kbd> to clear), plus filter chips
+  **All / Published / Unpublished / Unsaved** with counts. Filtering only *hides* cards, so a draft is never lost by filtering.
+- **Keyboard:** <kbd>Enter</kbd> or <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>S</kbd> saves the card you are editing.
+- **Warnings before saving:** if you publish a dish with an empty name, or whose image URL is not http(s), the card warns you before
+  you save. The backend is still the authority and rejects it with a 400 if you save anyway.
+- **Safe conflict handling:** a stale save is rejected (409). The card explains what changed, keeps your draft, and offers
+  **Reload latest** with an inline "Discard your unsaved changes?" confirmation (**Yes, discard and reload** / **Keep my draft**).
+- **Clear feedback:** "Saving…", "✓ Saved as vN", **Retry save** after network errors, a live sync indicator
+  ("Live · synced 10:21" or "Can't reach server · retrying"), placeholder cards while loading, and error and empty states.
+- **Phone, tablet and desktop layouts**, light and dark mode (follows the OS), an accessible switch for **Published**,
+  visible focus rings, reduced-motion support, and a warning before closing the tab with unsaved drafts.
 
 ---
 
@@ -168,12 +185,16 @@ backend/
   test/restart.test.js     real process: seed, save, kill, restart, reseed, verify
 
 frontend/src/
-  api.js                   fetch wrappers: { ok, status, data }, NetworkError, 10 s timeout
-  hooks/useDishes.js       saved dishes from the server: initial load, polling, merge by version
-  hooks/useDishDraft.js    per-dish draft state: base/draft, save, discard, conflict, reload
-  components/DishCard.jsx  one dish: form, unsaved indicators, error/conflict/newer-data notices
-  components/DishImage.jsx image with broken/invalid URL fallback
-  App.jsx                  page: loading / error / empty states, sync status, beforeunload guard
+  api.js                     fetch wrappers: { ok, status, data }, NetworkError, 10 s timeout
+  utils.js                   shared UI helpers (http(s) URL check, name limit, labels)
+  hooks/useDishes.js         saved dishes from the server: initial load, polling, merge by version
+  hooks/useDishDraft.js      per-dish draft state: base/draft, save, discard, conflict, reload
+  components/DishCard.jsx    one dish: form, unsaved indicators, warnings, error/conflict notices, inline confirm
+  components/DishImage.jsx   image with broken/invalid URL fallback
+  components/Toolbar.jsx     search box + filter chips
+  components/SyncStatus.jsx  live / disconnected indicator
+  App.jsx                    page: loading / error / empty states, filtering, shortcuts, beforeunload guard
+  __tests__/                 Vitest: draft hook, merge-by-version, DishCard conflict flow
 ```
 
 Each layer has one job. Routes know HTTP and nothing about SQL. The service knows the rules and nothing about HTTP.
@@ -196,7 +217,7 @@ Each card keeps two values:
 | **Save → 200** | `base = draft = response` (new version). The unsaved indicator clears and "Saved as vN" shows |
 | **Save → 400** | Draft kept. The server's messages are listed. The user can correct and save again |
 | **Save → network error / 5xx / timeout** | Draft kept, inputs stay editable, and the button becomes **Retry save** |
-| **Save → 409** | Draft kept untouched. A notice shows the newer saved version, and Save is disabled. **Reload latest (discards your draft)** asks for confirmation. Nothing is retried automatically |
+| **Save → 409** | Draft kept untouched. A notice shows the newer saved version, and Save is disabled. **Reload latest (discards your draft)** asks inline first ("Yes, discard and reload" / "Keep my draft"). Nothing is retried automatically |
 | Save in progress | Save, Discard, Reload and the inputs are disabled |
 
 ---
@@ -248,6 +269,23 @@ Automated (backend): `cd backend && npm test` runs 14 tests, all passing on Node
 ```
 
 The tests use throwaway databases in the OS temp directory and never touch `backend/data/dishes.db`.
+
+Automated (frontend): `cd frontend && npm test` runs 12 Vitest tests, all passing, with the API mocked.
+
+```
+✓ mergeNewer: a stale poll response never rolls a dish back to an older version
+✓ mergeNewer: newer versions replace older ones and the server list decides membership and order
+✓ useDishDraft: edits stay local until Save; Discard restores the loaded values
+✓ useDishDraft: Save sends the draft with the originally loaded version and applies the saved result
+✓ useDishDraft: marks the request in progress so the UI can disable Save
+✓ useDishDraft: 409 keeps the draft untouched, never retries, and reload loads the newer version
+✓ useDishDraft: 400 shows the server messages and keeps the draft for correction
+✓ useDishDraft: network failure keeps the draft and a retry can succeed
+✓ useDishDraft: newer saved data replaces a clean card but never a draft
+✓ DishCard: shows unsaved state and the saved value while editing
+✓ DishCard: warns before saving a published dish without a name
+✓ DishCard: conflict: reload asks inline first and "Keep my draft" keeps it
+```
 
 I also ran the manual steps below in the browser against a freshly seeded database.
 
@@ -301,7 +339,8 @@ I also ran the manual steps below in the browser against a freshly seeded databa
 5. Click **Save** in tab B. The response is **409**, and the card shows *"Not saved: this dish was changed by another update"*
    with the v2 values. B's draft stays in the input, and Save is disabled.
 6. `curl localhost:4000/dishes` shows "Rabdi from tab A", v2. A's update is intact.
-7. **Reload latest (discards your draft)** asks for confirmation and then loads v2. **Discard** also drops the draft.
+7. **Reload latest (discards your draft)** asks inline first. **Keep my draft** keeps it, and **Yes, discard and reload**
+   loads v2. **Discard** also drops the draft.
 
 ### 5. Failed save and retry
 1. Edit a dish, then stop the backend (Ctrl+C).
@@ -333,7 +372,7 @@ The Alfredo Pasta card updates by itself within 5 s, with no refresh.
   (`POLL_INTERVAL_MS` in `useDishes.js`). Returning to the tab (`visibilitychange`) or coming back online (`online` event)
   triggers an immediate poll.
 - **Cards with a draft** are never replaced in the background. They show "Newer saved data is available (vN …)"
-  with a **Load latest (discards your draft)** button that asks for confirmation. Cards without a draft follow the latest saved data automatically.
+  with a **Load latest (discards your draft)** button that asks for confirmation inline. Cards without a draft follow the latest saved data automatically.
 - **Out-of-order safety:** incoming data is merged per dish **by version**, keeping the higher one, so a slow poll
   that started before a save can never roll a dish back to an older version.
 - **Timer and connection cleanup:** polling is a `setTimeout` chain, so the next request is scheduled only after the previous one finishes
@@ -355,7 +394,10 @@ The Alfredo Pasta card updates by itself within 5 s, with no refresh.
   That is a deliberate choice to never silently overwrite. The draft stays visible to copy from before reloading.
 - **Unpublished dishes may have an empty name.** The brief requires a non-empty name only for published dishes, and
   the backend enforces exactly that.
-- **No frontend automated tests.** The frontend flows were verified manually (steps above). The backend has automated tests.
+- **No end-to-end browser tests.** The frontend draft logic and the card are unit-tested with Vitest, and the backend has API tests.
+  The full two-tab and backend-down flows were verified manually (steps above). Playwright would be the next step.
+- **Filters use saved values.** A card filtered by Published/Unpublished moves only after a successful save, not while
+  you are editing its draft.
 - **SQLite** is a single file on one machine: fine for this scope, not a multi-node production database.
   `node:sqlite` is new in Node and needs Node ≥ 22.13.
 - **No authentication, pagination, image upload, or dish creation and deletion** (out of scope). The fixture seed is the
@@ -373,7 +415,7 @@ Approximately **_X_ hours** (fill in before submitting).
   It helped write and refactor the backend and frontend code, the tests and this README, and helped run the
   verification steps. I reviewed the code, ran it locally, and can explain and modify every part of it, including the
   draft state and conflict handling.
-- **Libraries:** Express, cors, React, React DOM, Vite and @vitejs/plugin-react (see `package.json` files), plus Node's
-  built-in `node:sqlite` and `node:test`.
+- **Libraries:** Express, cors, React, React DOM, Vite and @vitejs/plugin-react; for tests, Vitest,
+  @testing-library/react and jsdom (see `package.json` files); plus Node's built-in `node:sqlite` and `node:test`.
 - **Reused code:** no substantial code was copied from other repositories or tutorials.
 - **Seed data:** `backend/seed/dishes.json` is the JSON supplied in the assignment, unchanged.
