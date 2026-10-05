@@ -41,7 +41,7 @@ overwrite a newer saved change.
 ## Setup and run
 
 ```bash
-git clone <repo-url> nosh-dish-dashboard
+git clone https://github.com/badalraj047/nosh-dish-dashboard.git
 cd nosh-dish-dashboard
 
 # 1) Backend: install, seed, start (http://localhost:4000)
@@ -407,7 +407,7 @@ The Alfredo Pasta card updates by itself within 5 s, with no refresh.
 
 ## Time spent
 
-Approximately **_X_ hours** (fill in before submitting).
+Approximately **2–3 hours**.
 
 ## AI and reused-code disclosure
 
