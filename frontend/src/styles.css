@@ -22,36 +22,10 @@
   --info-text: #1d4580;
   --skeleton: #ecece7;
   --radius: 12px;
+  color-scheme: light; /* always light, regardless of the OS theme */
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #161715;
-    --surface: #20211f;
-    --text: #ececea;
-    --muted: #a3a39d;
-    --border: #353633;
-    --primary: #3fa57a;
-    --primary-text: #0d1a14;
-    --secondary: #31322f;
-    --secondary-hover: #3b3c38;
-    --unsaved: #e2a94b;
-    --on-unsaved: #1d1608;
-    --unsaved-bg: #3a2f17;
-    --ok-bg: #1c3b2a;
-    --ok-text: #9fe0bc;
-    --ok-dot: #4cc68c;
-    --error-bg: #45201c;
-    --error-text: #ffb4ab;
-    --danger: #ffb4ab;
-    --on-danger: #3a0905;
-    --info-bg: #1d2c44;
-    --info-text: #b5d0f7;
-    --skeleton: #2a2b28;
-  }
 }
 
 * { box-sizing: border-box; }
@@ -204,7 +178,8 @@ kbd {
 .btn--warn { background: var(--unsaved); color: var(--on-unsaved); }
 .btn--danger { background: var(--danger); color: var(--on-danger); }
 .btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* Disabled buttons are plain grey, so Save only turns green when there is something to save. */
+.btn:disabled { background: var(--secondary); color: var(--muted); opacity: 0.7; cursor: not-allowed; filter: none; }
 
 /* Page states */
 .state {

@@ -26,7 +26,7 @@ overwrite a newer saved change.
   **Reload latest** with an inline "Discard your unsaved changes?" confirmation (**Yes, discard and reload** / **Keep my draft**).
 - **Clear feedback:** "Saving…", "✓ Saved as vN", **Retry save** after network errors, a live sync indicator
   ("Live · synced 10:21" or "Can't reach server · retrying"), placeholder cards while loading, and error and empty states.
-- **Phone, tablet and desktop layouts**, light and dark mode (follows the OS), an accessible switch for **Published**,
+- **Phone, tablet and desktop layouts**, a consistent light theme (even when the OS is in dark mode), an accessible switch for **Published**,
   visible focus rings, reduced-motion support, and a warning before closing the tab with unsaved drafts.
 
 ---
@@ -355,7 +355,7 @@ I also ran the manual steps below in the browser against a freshly seeded databa
 - **Error:** start the frontend with the backend stopped. You get "Couldn't load dishes" and a **Try again** button.
 - **Empty:** point `DB_PATH` at a new file without seeding. You get "No dishes yet. Seed the database with `npm run seed`".
 - **Broken image:** the fixture dishes above show the "Image unavailable" placeholder.
-- **Responsive:** the grid collapses to one column on phones (checked at 375 px). Dark mode follows the OS.
+- **Responsive:** the grid collapses to one column on phones (checked at 375 px). The light theme stays the same when the OS is in dark mode.
 
 ---
 
